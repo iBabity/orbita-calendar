@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { env } from 'cloudflare:workers';
+import { isAllowedEmail } from '../lib/access-policy.mts';
 
 export type ChatGPTUser = {
   userId: string;
@@ -18,7 +20,7 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
-export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+export async function getChatGPTIdentity(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
@@ -39,11 +41,22 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   };
 }
 
+export function canUseCalendar(user: ChatGPTUser): boolean {
+  return isAllowedEmail(user.email, (env as unknown as Record<string, unknown>).ORBITA_ALLOWED_EMAILS);
+}
+
+// All private API routes use this gate before touching user data or Google.
+export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  const user = await getChatGPTIdentity();
+  return user && canUseCalendar(user) ? user : null;
+}
+
 export async function requireChatGPTUser(
   returnTo: string,
 ): Promise<ChatGPTUser> {
-  const user = await getChatGPTUser();
-  if (user) return user;
+  const user = await getChatGPTIdentity();
+  if (user && canUseCalendar(user)) return user;
+  if (user) redirect('/access-denied');
 
   redirect(chatGPTSignInPath(returnTo));
 }

@@ -54,3 +54,7 @@ Este é um projeto de estudo em evolução, construído a partir do uso real. O 
 O funcionamento depende de internet. Algumas operações do Google dependem das permissões da conta; eventos com convidados ou recorrência têm restrições para preservar seus vínculos. A instalação e a sincronização entre aparelhos físicos ainda precisam de validação em cada equipamento.
 
 Projeto independente, sem vínculo com Notion, Google ou Bitrix24.
+
+## Acesso por convite
+
+A apresentação, a política de privacidade e os termos são públicos. O calendário e suas APIs exigem uma conta autenticada cujo e-mail esteja em ORBITA_ALLOWED_EMAILS, configurada no servidor (endereços separados por vírgula). Sem essa configuração, nenhum usuário recebe acesso ao calendário. A lista não é enviada ao navegador nem publicada no repositório. Para hospedar sua cópia, configure a sua própria lista.
