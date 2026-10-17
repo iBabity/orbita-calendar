@@ -1,0 +1,28 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {executeDeletions,checkGoogleTarget,deleteOutcome,canRetryDeletion,deletionMessage} from '../lib/deletion-service.ts';
+const target={kind:'google',id:'google:work:event-one',calendarId:'work',eventId:'event-one',title:'Reunião',start:'2026-10-16T12:00:00.000Z',end:'2026-10-16T13:00:00.000Z',allDay:false,agenda:'Equipe'};
+const ready=t=>({id:t.id,state:'ready',message:''});
+const success=data=>({status:'success',result:{content:[],structuredContent:data}});
+const event={id:'event-one',summary:target.title,start:target.start,end:target.end};
+const cals=success({calendars:[{id:'work',access_role:'writer'}]});
+test('ação ausente explica a falha inclusive em recibos antigos e impede repetição sem correção',()=>{
+ const old={id:target.id,state:'blocked',message:'Exclusão não autorizada ou temporariamente indisponível.',connector:{status:'tool_not_found',message:'Action unavailable'}};
+ assert.match(deletionMessage(old),/integração do site/);
+ assert.match(deletionMessage(old),/Google Calendar/);
+ assert.equal(canRetryDeletion(old),false);
+ const current=deleteOutcome(old.connector,target.id);
+ assert.equal(current.message,deletionMessage(old));
+ assert.equal(current.state,'blocked');
+ assert.equal(canRetryDeletion(deleteOutcome({status:'invalid_request',message:'Bad arguments'},target.id)),false);
+ assert.equal(canRetryDeletion(deleteOutcome({status:'rate_limited',message:'Wait',retryAfterMs:30000},target.id)),true);
+ assert.equal(canRetryDeletion({id:target.id,state:'unknown',message:'Timeout'}),false);
+});
+test('exclui só os IDs escolhidos, conferindo permissão e evento antes da exclusão',async()=>{const calls=[],saved=[];const result=await executeDeletions([target],[ready(target)],async(action,args)=>{calls.push({action,args});return action==='list_calendars'?cals:action==='read_event'?success(event):success(null)},async()=>{throw Error('não é local')},async rows=>saved.push(structuredClone(rows)));assert.deepEqual(calls.map(c=>c.action),['list_calendars','read_event','delete_event']);assert.deepEqual(calls[2].args,{calendar_id:'work',event_id:'event-one'});assert.equal(result[0].state,'deleted');assert.equal(result[0].connector.result.structuredContent,null);assert.equal(saved[0][0].state,'pending')});
+test('agenda somente leitura nunca recebe read_event nem delete_event',async()=>{const calls=[];const result=await executeDeletions([target],[ready(target)],async action=>{calls.push(action);return success({calendars:[{id:'work',access_role:'reader'}]})},async()=>{},async()=>{});assert.deepEqual(calls,['list_calendars']);assert.equal(result[0].state,'refused')});
+test('mudança de título/horário, ID diferente e série recorrente impedem exclusão',()=>{for(const raw of [{...event,summary:'Alterado'},{...event,start:'2026-10-16T13:00:00Z'},{...event,id:'other',status:'cancelled'},{...event,recurrence:['RRULE:FREQ=DAILY']}])assert.ok(['changed','refused'].includes(checkGoogleTarget(target,raw).state));assert.equal(checkGoogleTarget(target,{...event,recurring_event_id:'series'}),null)});
+test('dia inteiro compara as datas exclusivas sem depender do fuso do servidor',()=>{assert.equal(checkGoogleTarget({...target,allDay:true,startDate:'2026-10-16',endDate:'2026-10-17'},{...event,start:{date:'2026-10-16'},end:{date:'2026-10-17'}}),null)});
+test('resultado incerto ou já confirmado não repete exclusão',async()=>{let calls=0;const outcomes=[{id:target.id,state:'unknown',message:'timeout'}];await executeDeletions([target],outcomes,async()=>{calls++;return success(null)},async()=>{calls++;},async()=>{});assert.equal(calls,0);assert.equal(deleteOutcome({status:'upstream_error',message:'timeout'},target.id).state,'unknown');assert.equal(deleteOutcome({status:'rate_limited',message:'aguarde',retryAfterMs:30000},target.id).state,'blocked')});
+test('sem registro durável, nenhuma exclusão é enviada',async()=>{let deletes=0;await assert.rejects(()=>executeDeletions([target],[ready(target)],async action=>action==='list_calendars'?cals:action==='read_event'?success(event):(deletes++,success(null)),async()=>{},async()=>{throw Error('database')}));assert.equal(deletes,0)});
+test('falha em uma agenda preserva confirmação de outra e permite tentar só o bloqueado',async()=>{const local={...target,kind:'local',id:'local-test',version:1};const result=await executeDeletions([local,target],[ready(local),ready(target)],async()=>({status:'tool_not_allowed',message:'Prévia somente leitura'}),async t=>({id:t.id,state:'deleted',message:'ok'}),async()=>{});assert.equal(result[0].state,'deleted');assert.equal(result[1].state,'blocked');let localCalls=0;const retry=result.map(o=>o.state==='blocked'?{...o,state:'ready'}:o);await executeDeletions([local,target],retry,async()=>({status:'tool_not_allowed',message:'Prévia'}),async()=>{localCalls++;},async()=>{});assert.equal(localCalls,0)});
+test('falha depois da conferência preserva bloqueio ou incerteza sem novo envio',async()=>{for(const transport of [false,true]){let deletes=0;const denied={status:'tool_not_allowed',message:'Somente leitura',result:{content:[{type:'text',text:'Negado'}],structuredContent:false}};const result=await executeDeletions([target],[ready(target)],async action=>{if(action==='list_calendars')return cals;if(action==='read_event')return success(event);deletes++;if(transport)throw Error('timeout');return denied},async()=>{},async()=>{});assert.equal(deletes,1);assert.equal(result[0].state,transport?'unknown':'blocked');if(!transport)assert.deepEqual(result[0].connector,denied);await executeDeletions([target],result,async()=>{throw Error('Reenvio inesperado')},async()=>{},async()=>{})}});

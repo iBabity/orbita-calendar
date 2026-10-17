@@ -1,0 +1,7 @@
+export type Event = { id:string; title:string; start:string; end:string; calendar:string; description:string; location:string; allDay:boolean; version:number; external?:boolean; url?:string; meetUrl?:string; meetStatus?:string; contactName?:string;companyName?:string;phone?:string;timezone?:string;timezoneConfirmed?:boolean;googleEventId?:string;googleEtag?:string;googleStartDate?:string;googleEndDate?:string;canDelete?:boolean;recurringSeries?:boolean };
+export const calendars = [{id:'pessoal',name:'Pessoal',color:'#9677d3',version:0,deletionVersion:0},{id:'trabalho',name:'Trabalho',color:'#537db5',version:0,deletionVersion:0},{id:'projetos',name:'Projetos',color:'#b78048',version:0,deletionVersion:0}];
+export function dayKey(d:Date) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+export function addDays(d:Date,n:number) { const r=new Date(d); r.setDate(r.getDate()+n);return r; }
+export function weekStart(d:Date) {const r=addDays(d,-((d.getDay()+6)%7));r.setHours(0,0,0,0);return r;}
+export function inputDate(iso:string) {const d=new Date(iso);return `${dayKey(d)}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+export function rangeFor(date:Date,view:string) {if(view==='month'){const s=weekStart(new Date(date.getFullYear(),date.getMonth(),1));return [s,addDays(s,42)]}const s=view==='day'?new Date(date):weekStart(date);s.setHours(0,0,0,0);return [s,addDays(s,view==='day'?1:7)]}

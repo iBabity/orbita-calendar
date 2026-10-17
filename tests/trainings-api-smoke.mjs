@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+const base='http://127.0.0.1:5173';
+const auth=await fetch(base+'/signin-with-chatgpt?return_to=/',{redirect:'manual'});
+const cookie=auth.headers.get('set-cookie')?.split(';')[0];assert.ok(cookie);
+const headers={Cookie:cookie,Origin:base,'Content-Type':'application/json'};
+assert.equal((await fetch(base+'/api/trainings')).status,401);
+assert.equal((await fetch(base+'/api/trainings',{method:'POST',headers:{Origin:base},body:'{}'})).status,401);
+assert.equal((await fetch(base+'/api/trainings',{method:'POST',headers:{Cookie:cookie},body:'{}'})).status,403);
+const post=async body=>{const r=await fetch(base+'/api/trainings',{method:'POST',headers,body:JSON.stringify(body)});return [r.status,await r.json()]};
+assert.equal((await post({action:'create',id:'bad'}))[0],400);
+const invalid={action:'create',id:crypto.randomUUID(),expectedTargets:['one','two'],payload:{title:'',start:'2026-10-16T19:00:00.000Z',end:'2026-10-16T18:00:00.000Z',description:'',location:'',timezone:'America/Sao_Paulo'}};
+assert.equal((await post(invalid))[0],400);
+assert.equal((await fetch(base+'/api/trainings?id=bad',{headers})).status,400);
+const data=await(await fetch(base+'/api/trainings',{headers})).json();
+const run=data.runs.find(r=>r.title==='TESTE LOCAL — fluxo de agendamento');
+assert.ok(run,'Execute o envio descartável na prévia com apenas leituras antes deste teste.');
+assert.equal(run.state,'finished');assert.ok(run.outcomes.every(o=>o.state==='blocked'&&o.connector.status==='tool_not_allowed'));
+const payload={title:run.title,start:run.start,end:run.end,description:'',location:'',timezone:'America/Sao_Paulo'};
+const body={action:'create',id:run.id,payload,expectedTargets:run.targets.map(t=>t.id)};
+const repeated=await Promise.all([post(body),post(body)]);
+for(const [status,result]of repeated){assert.equal(status,200);assert.equal(result.run.id,run.id);assert.deepEqual(result.run.outcomes,run.outcomes)}
+assert.equal((await post({...body,payload:{...payload,title:'Dados alterados'}}))[0],409);
+const after=await(await fetch(base+'/api/trainings',{headers})).json();assert.equal(after.runs.filter(r=>r.id===run.id).length,1);
+console.log('PASS: autenticação, Origin, validação, histórico, bloqueio local de escrita, idempotência concorrente e rejeição de dados alterados. Nenhuma escrita no Google foi executada.');

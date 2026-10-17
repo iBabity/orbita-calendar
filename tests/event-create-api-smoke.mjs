@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+const base='http://127.0.0.1:5173';
+const auth=await fetch(base+'/signin-with-chatgpt?return_to=/',{redirect:'manual'});
+const headers={Cookie:auth.headers.get('set-cookie').split(';')[0],Origin:base,'Content-Type':'application/json'};
+const post=async body=>{const r=await fetch(base+'/api/trainings',{method:'POST',headers,body:JSON.stringify(body)});return [r.status,await r.json()]};
+const data=await(await fetch(base+'/api/trainings',{headers})).json();
+const run=data.runs.find(r=>r.title==='TESTE LOCAL — agenda única com Meet');
+assert.ok(run,'Envie o teste descartável no formulário da prévia, que bloqueia escritas externas.');
+assert.equal(run.targets.length,1);assert.equal(run.outcomes.length,1);assert.ok(['google','personal'].includes(run.targets[0].kind));
+assert.equal(run.outcomes[0].state,'blocked');assert.equal(run.outcomes[0].connector.status,'tool_not_allowed');
+const payload={title:run.title,start:run.start,end:run.end,description:'',location:'',timezone:'America/Sao_Paulo',addGoogleMeet:true,allDay:false};
+const body={action:'create',id:run.id,payload,expectedTargets:run.targets.map(t=>t.id)};
+const repeated=await Promise.all([post(body),post(body)]);
+for(const [status,result] of repeated){assert.equal(status,200);assert.deepEqual(result.run.outcomes,run.outcomes)}
+assert.equal((await post({...body,expectedTargets:['other-calendar']}))[0],409);
+assert.equal((await post({...body,id:crypto.randomUUID(),expectedTargets:['one','two']}))[0],400);
+const refreshed=await post({action:'refresh_meet',id:run.id});assert.equal(refreshed[0],200);assert.deepEqual(refreshed[1].run.outcomes,run.outcomes);
+assert.equal((await post({action:'refresh_meet',id:crypto.randomUUID()}))[0],404);
+const own=await(await fetch(base+'/api/events',{headers})).json();const local=own.events.filter(e=>e.title==='TESTE LOCAL — evento em agenda escolhida');
+assert.equal(local.length,1);assert.equal(local[0].calendar,'projetos');assert.equal(local[0].allDay,true);assert.equal(Date.parse(local[0].end)-Date.parse(local[0].start),86400000);
+assert.equal((await fetch(base+'/api/events',{method:'DELETE',headers,body:JSON.stringify({id:local[0].id,version:local[0].version})})).status,200);
+console.log('PASS: uma única agenda, Meet solicitado, escrita Google bloqueada na prévia, idempotência concorrente, destino alterado rejeitado, múltiplos destinos rejeitados, consulta sem recriação e evento local em Projetos (removido após o teste).');
