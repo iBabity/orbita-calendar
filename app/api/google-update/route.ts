@@ -1,3 +1,4 @@
+import {closedHoliday,holidayMessage} from '@/lib/holidays.mts';
 import {and,eq} from 'drizzle-orm';
 import {z} from 'zod';
 import {getDb} from '@/db';
@@ -38,6 +39,8 @@ export async function POST(req:Request){
   const event=connectorPayload(read);
   if(event.id!==payload.eventId||event.etag!==payload.etag||event.status==='cancelled')return finish({state:'changed',message:'O evento mudou em outro dispositivo. Atualize a agenda antes de editar novamente.'});
   if(event.locked||event.recurrence?.length)return finish({state:'blocked',message:'Abra este evento no Google para alterar a série recorrente ou o registro protegido.'});
+  const previous={start:event.start?.dateTime||(event.start?.date+'T00:00:00Z'),end:event.end?.dateTime||(event.end?.date+'T00:00:00Z'),allDay:!!event.start?.date,startDate:event.start?.date,endDate:event.end?.date};
+  const holiday=closedHoliday(payload,previous);if(holiday)return finish({state:'blocked',message:holidayMessage(holiday)});
   // Persist the pending write before sending it. GET and duplicate POST only
   // consult this receipt; an uncertain PATCH is never automatically repeated.
   await db.update(googleUpdateRuns).set({outcome:JSON.stringify({state:'pending',message:'Alteração enviada; aguardando confirmação.'})}).where(owned);

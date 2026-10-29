@@ -1,4 +1,6 @@
 'use client';
+import {fieldHoliday} from './holiday-notice';
+import {holidayMessage} from '@/lib/holidays.mts';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowUpRight,Check,CalendarDays,Loader2,RefreshCw,Video,X,Copy} from 'lucide-react';
 import {type Event} from '@/lib/calendar';
@@ -31,6 +33,7 @@ export default function EventCreateDialog({draft,calendars,canEdit,onClose,onCre
   if(!retry&&contact.phone&&!phoneRegion(contact.phone).valid){setError('Informe um telefone brasileiro completo com DDD.');return}
   if(!retry&&!contact.zoneConfirmed){setError('Escolha a região do contato para confirmar o fuso.');return}
   let payload;try{payload={title:title.trim(),start:wallToIso(start,timezone),end:wallToIso(end,timezone),contactName:contact.contactName.trim(),companyName:contact.companyName.trim(),phone:contact.phone.trim(),location,description,timezone,allDay,addGoogleMeet:isGoogle&&meet,...(allDay?{startDate:start.slice(0,10),endDate:end.slice(0,10)}:{})};if(!retry&&(!payload.title||payload.end<=payload.start))throw Error()}catch{setError('Informe o título e um término depois do início.');return}
+  const holiday=fieldHoliday({start,end,timezone,allDay});if(!retry&&holiday){setError(holidayMessage(holiday));return}
   lock.current=true;setBusy(true);setError('');
   if(!isGoogle&&!retry){
    try{const r=await fetch('/api/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...draft,...payload,calendar:destination.slice(6)})});const data:any=await r.json();if(data.signin)setSignin(data.signin);if(!r.ok||!data.event)throw Error(data.error||'Não foi possível salvar.');onLocalSaved(data.event)}catch(e:any){setError(e.message)}finally{lock.current=false;setBusy(false)}return;
@@ -69,7 +72,7 @@ export default function EventCreateDialog({draft,calendars,canEdit,onClose,onCre
  <details className="training-details"><summary>Local e observações (opcional)</summary><label className="training-field">Local ou link<input maxLength={500} placeholder="Adicionar local ou link" value={location} disabled={locked} onChange={e=>setLocation(e.target.value)}/></label><label className="training-field">Descrição<textarea rows={3} maxLength={5000} placeholder="Uma descrição, uma ideia, um lembrete…" value={description} disabled={locked} onChange={e=>setDescription(e.target.value)}/></label></details>
  {!canEdit&&<p className="form-error">Entre na sua conta para salvar e sincronizar. <a href={signin||'/signin-with-chatgpt?return_to=%2F'} target="_top">Entrar</a></p>}
  {error&&<p className="form-error" role="alert">{error}</p>}
- <div className="modal-footer">{pendingId?<button type="button" className="save-button" disabled={busy} onClick={()=>checkResult(pendingId)}>{busy?<Loader2 size={15} className="spin"/>:<RefreshCw size={15}/>}Consultar resultado do envio</button>:<><button type="button" className="cancel-button" disabled={busy} onClick={onClose}>Cancelar</button><button className="save-button" type="submit" disabled={busy||!canEdit||(isGoogle&&(targetsLoading||!!targetError))}>{busy?<Loader2 size={15} className="spin"/>:<CalendarDays size={15}/>} {busy?'Salvando…':'Salvar evento'}</button></>}</div>
+ <div className="modal-footer">{pendingId?<button type="button" className="save-button" disabled={busy} onClick={()=>checkResult(pendingId)}>{busy?<Loader2 size={15} className="spin"/>:<RefreshCw size={15}/>}Consultar resultado do envio</button>:<><button type="button" className="cancel-button" disabled={busy} onClick={onClose}>Cancelar</button><button className="save-button" type="submit" disabled={busy||!canEdit||!!fieldHoliday({start,end,timezone,allDay})||(isGoogle&&(targetsLoading||!!targetError))}>{busy?<Loader2 size={15} className="spin"/>:<CalendarDays size={15}/>} {busy?'Salvando…':'Salvar evento'}</button></>}</div>
  </form>}
  {!run&&history.length>0&&<details className="training-history"><summary className="eyebrow">ENVIOS RECENTES</summary>{history.map(r=><button key={r.id} disabled={busy} onClick={()=>{meetReads.current=0;checkResult(r.id)}}><span><strong>{r.title}</strong><small>{new Date(r.start).toLocaleDateString('pt-BR',{timeZone:r.timezone||timezone})} · {r.outcomes.filter(o=>o.state==='created').length} de {r.targets.length} {r.targets.length===1?'agenda confirmada':'agendas confirmadas'}</small></span><ArrowUpRight size={14}/></button>)}</details>}
  </section></div>

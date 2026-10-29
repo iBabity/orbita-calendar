@@ -1,3 +1,4 @@
+import {closedHoliday,holidayMessage} from '@/lib/holidays.mts';
 import {and,eq} from 'drizzle-orm';
 import {z} from 'zod';
 import {getDb} from '@/db';
@@ -33,6 +34,7 @@ export async function POST(req:Request){
  try{
   const [existing]=await db.select().from(eventTransferRuns).where(owned);
   if(existing)return existing.payload===JSON.stringify(body)?json({run:receipt(existing)}):json({error:'Esta mudança já foi enviada com outros dados.'},409);
+  const holiday=closedHoliday(destinationGoogle?p:{...p,startDate:undefined,endDate:undefined});if(holiday)return json({error:holidayMessage(holiday),code:'holiday_closed'},409);
   const [claimed]=await db.insert(eventTransferRuns).values({id:body.id,owner:user.userId,payload:JSON.stringify(body),outcome:JSON.stringify({state:'checking',message:'Conferindo origem e destino.'}),state:'running',createdAt:Date.now()}).onConflictDoNothing().returning();
   if(!claimed){const [row]=await db.select().from(eventTransferRuns).where(owned);return row?.payload===JSON.stringify(body)?json({run:receipt(row)}):json({error:'Este envio já está em uso.'},409)}
   let client:Awaited<ReturnType<typeof googleForRequest>>|undefined;

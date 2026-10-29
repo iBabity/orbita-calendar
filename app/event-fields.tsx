@@ -1,4 +1,5 @@
 'use client';
+import {HolidayNotice} from './holiday-notice';
 import {phoneRegion,brazilZones,zoneLabel,shiftWall,zonedInput} from '@/lib/brazil-time.mjs';
 import {defaultBrazilZone,wallToIso} from '@/lib/brazil-time.mjs';
 import type {Event} from '@/lib/calendar';
@@ -21,6 +22,7 @@ export default function EventFields({value:v,onChange,disabled=false,readOnly=fa
  <label className="multi-date"><input type="checkbox" checked={multi} disabled={locked} onChange={e=>update({end:e.target.checked?shiftWall(v.end,1440):v.allDay?shiftWall(v.start,1440):startDate+'T'+v.end.slice(11)})}/> {v.allDay?'Mais de um dia':'Termina em outro dia'}</label>
  {multi&&<label className="last-date">{v.allDay?'Último dia':'Data do fim'}<input type="date" required min={startDate} value={v.allDay?shiftWall(v.end,-1440).slice(0,10):endDate} disabled={locked} onChange={e=>{if(e.target.value)update({end:v.allDay?shiftWall(e.target.value+'T00:00',1440):e.target.value+'T'+v.end.slice(11)})}}/></label>}
  <div className="event-timezone"><label>Fuso do compromisso<select aria-label="Fuso do compromisso" required value={v.zoneConfirmed?v.timezone:''} disabled={locked} onChange={e=>update({timezone:e.target.value,zoneConfirmed:true})}>{!v.zoneConfirmed&&<option value="">Escolha a região do contato</option>}{(region.choices.length?brazilZones.filter(([zone])=>region.choices.includes(zone)):brazilZones).map(([zone])=><option key={zone} value={zone}>{zoneLabel(zone,v.start)}</option>)}</select></label><p className="hint">{!v.zoneConfirmed?'Este DDD abrange mais de um fuso. Escolha a região do contato.':region.timezone?(v.timezone===region.timezone?'Ajustado pelo DDD '+region.ddd+'.':'Fuso escolhido para o DDD '+region.ddd+'.')+' Os horários acima são os horários do contato.':'Sem telefone, usamos seu fuso brasileiro. Os horários acima seguem o fuso selecionado.'}</p></div>
+ <HolidayNotice value={v}/>
  </>
 }
 export function ExistingEventFields({event,onChange,disabled=false,onError}:{event:Event;onChange:(v:Event)=>void;disabled?:boolean;onError:(message:string)=>void}){

@@ -1,3 +1,4 @@
+import {closedHoliday,holidayMessage} from '@/lib/holidays.mts';
 import {contactFields,validContactZone} from '@/lib/event-validation';
 import {contactDescription} from '@/lib/brazil-time.mjs';
 import {and,desc,eq} from 'drizzle-orm';
@@ -41,6 +42,7 @@ export async function POST(req:Request){
    const [saved]=await db.select().from(trainingRuns).where(owned);return json({run:receipt(saved),signin:await googleReconnectPath(user.userId,chatGPTSignInPath('/'))});
   }
   if(body.action==='create'&&body.expectedTargets.length!==1)return json({error:'Escolha apenas uma agenda para o evento.'},400);
+  const holiday=closedHoliday(body.action==='create'?body.payload:JSON.parse(row.payload));if(holiday)return json({error:holidayMessage(holiday),code:'holiday_closed'},409);
   const found=await targetsForRequest(user.userId);if(found.response)return found.response;const available=found.targets!;
   const selectedIds=body.action==='create'?body.expectedTargets:(JSON.parse(row.targets) as TrainingTarget[]).map(t=>t.id);
   const targets=selectedIds.map(id=>available.find(t=>t.id===id));

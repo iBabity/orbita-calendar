@@ -12,6 +12,7 @@ Criei o projeto para estudar desenvolvimento e resolver uma necessidade do meu d
 - Registrar nome do contato, empresa e telefone nos treinamentos e solicitar um link do Google Meet.
 - Personalizar nomes e cores das agendas do Órbita, além de excluir e restaurar agendas próprias.
 - Usar tema claro, escuro ou automático, alto contraste, texto ampliado e redução de animações.
+- Identificar feriados nacionais, estaduais de SP e municipais de Campinas como dias fechados, impedindo novos agendamentos pelo Órbita e preservando eventos existentes. [Regras e fontes](docs/HOLIDAYS.md).
 - Acessar pelo computador, tablet ou celular e instalar pelo navegador como aplicativo.
 
 A agenda do Bitrix pode ser usada quando estiver disponível na conta Google conectada. A chegada dos eventos ao Bitrix24 depende da sincronização entre os dois serviços.
