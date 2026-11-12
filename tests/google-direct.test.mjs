@@ -33,16 +33,16 @@ test('renova token expirado uma vez por requisição e persiste criptografado an
  let refresh=0,reads=0;const f=await sessionFixture({expired:true,request:async(url,init)=>{if(url==='https://oauth2.googleapis.com/token'){refresh++;assert.equal(init.body.get('grant_type'),'refresh_token');return Response.json({access_token:'new-access',expires_in:3600})}reads++;assert.equal(new Headers(init.headers).get('Authorization'),'Bearer new-access');return Response.json({items:[]})}});
  await Promise.all([f.invoke('list_calendars',{}),f.invoke('list_calendars',{})]);assert.equal(refresh,1);assert.equal(reads,2);assert.ok(!f.row.tokens.includes('new-access'));assert.equal((await unseal(key,'owner',f.row.tokens)).refreshToken,'refresh-one');
 });
-test('refresh concorrente não sobrescreve conexão nova nem envia operação com credencial antiga',async()=>{
- let reads=0;const f=await sessionFixture({expired:true,replace:false,request:async(url)=>{if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'new-access',expires_in:3600});reads++;return Response.json({items:[]})}});const r=await f.invoke('list_calendars',{});assert.equal(r.status,'reauthentication_required');assert.equal(reads,0);
+test('falha temporária ao persistir refresh não exige consentimento nem envia operação com token antigo',async()=>{
+ let reads=0;const f=await sessionFixture({expired:true,replace:false,request:async(url)=>{if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'new-access',expires_in:3600});reads++;return Response.json({items:[]})}});const r=await f.invoke('list_calendars',{});assert.equal(r.status,'upstream_error');assert.equal(reads,0);assert.equal(f.marks,0);
 });
 test('desconexão ou troca de conta impede chamadas e nunca troca de provedor',async()=>{
  let calls=0;const f=await sessionFixture({request:async()=>{calls++;return Response.json({items:[]})}});f.row={...f.row,subject:'another-account'};assert.equal((await f.invoke('create_event',{calendar_id:'work',title:'Test'})).status,'reauthentication_required');assert.equal(calls,0);
  f.row=undefined;assert.equal((await f.invoke('list_calendars',{})).status,'reauthentication_required');assert.equal(calls,0);
 });
-test('invalid_grant pede reconexão sem chamar a API; 401 marca o token atual após refresh',async()=>{
+test('invalid_grant pede consentimento; falha 401 da API não invalida renovação aceita',async()=>{
  const invalid=await sessionFixture({expired:true,request:async url=>{assert.equal(url,'https://oauth2.googleapis.com/token');return Response.json({error:'invalid_grant'},{status:400})}});assert.equal((await invalid.invoke('list_calendars',{})).status,'reauthentication_required');assert.equal(invalid.row.status,'reconnect');
- const revoked=await sessionFixture({expired:true,request:async url=>url==='https://oauth2.googleapis.com/token'?Response.json({access_token:'new-access',expires_in:3600}):new Response(null,{status:401})});assert.equal((await revoked.invoke('list_calendars',{})).status,'reauthentication_required');assert.equal(revoked.row.status,'reconnect');assert.equal(revoked.marks,1);
+ const revoked=await sessionFixture({expired:true,request:async url=>url==='https://oauth2.googleapis.com/token'?Response.json({access_token:'new-access',expires_in:3600}):new Response(null,{status:401})});assert.equal((await revoked.invoke('list_calendars',{})).status,'upstream_error');assert.equal(revoked.row.status,'active');assert.equal(revoked.marks,0);
 });
 test('configuração OAuth exige chave AES de 32 bytes e callback seguro e exato',()=>{
  const env={GOOGLE_CLIENT_ID:config.clientId,GOOGLE_CLIENT_SECRET:config.clientSecret,GOOGLE_REDIRECT_URI:config.redirectUri,GOOGLE_TOKEN_ENCRYPTION_KEY:key};assert.deepEqual(googleConfig(env),config);
